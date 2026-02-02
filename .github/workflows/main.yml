@@ -1,4 +1,4 @@
-name: Build sunxi-tools
+name: Build sunxi-tools for Windows
 
 on: [workflow_dispatch]
 
@@ -9,25 +9,33 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Setup MSYS2
+    - name: Setup MSYS2 with all dependencies
       uses: msys2/setup-msys2@v2
       with:
+        msystem: MINGW64
         update: true
         install: |
           base-devel
           git
-          mingw-w64-x86_64-toolchain
+          mingw-w64-x86_64-gcc
           mingw-w64-x86_64-libusb
-          pkg-config
+          mingw-w64-x86_64-dtc  # 这个包含libfdt
+          mingw-w64-x86_64-zlib
+          mingw-w64-x86_64-pkg-config
+          make
     
     - name: Build
       shell: msys2 {0}
       run: |
-        # 直接在代码目录构建
         make
         
-    - name: Upload binary
+    - name: Test
+      shell: msys2 {0}
+      run: |
+        ./sunxi-fel.exe --help || true
+        
+    - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: sunxi-fel-exe
+        name: sunxi-fel-windows
         path: sunxi-fel.exe
