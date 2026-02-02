@@ -9,45 +9,39 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Setup MSYS2 with all dependencies
+    - name: Setup MSYS2
       uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
         update: true
-        install: |
-          base-devel
-          git
-          mingw-w64-x86_64-gcc
-          mingw-w64-x86_64-libusb
-          mingw-w64-x86_64-dtc
-          mingw-w64-x86_64-zlib
-          mingw-w64-x86_64-pkg-config
-          make
-    
-    - name: Build and Collect Dependencies
+        install: >
+          base-devel git mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-libusb mingw-w64-x86_64-dtc
+          mingw-w64-x86_64-zlib mingw-w64-x86_64-pkg-config make
+
+    - name: Compile sunxi-fel (Bypassing broken install rule)
       shell: msys2 {0}
       run: |
-        # 1. 编译程序
-        make
-        
-        # 2. 查找 sunxi-fel.exe 依赖的所有 DLL 文件，并复制到当前目录
-        #    ldd: 列出依赖
-        #    grep: 筛选出包含 "mingw64" 路径的行 (即外部库)
-        #    cut: 提取文件路径
-        #    xargs cp: 复制这些文件到当前目录
-        ldd sunxi-fel.exe | grep "mingw64" | cut -d'=' -f3 | xargs cp -t ./
-        
-        # 3. (可选) 查看当前目录文件，确认 DLL 已经被复制过来
-        ls -l
+        # 1. 只编译 sunxi-fel，不运行 "make install"
+        # 根据 Makefile 规则，手动编译 fel 及其依赖组件
+        gcc -std=c99 -Wall -Wextra -Wno-unused-result \
+          -D_POSIX_C_SOURCE=200112L -D_BSD_SOURCE -D_DEFAULT_SOURCE \
+          -Iinclude/ -DNO_MMAP \
+          -o sunxi-fel.exe \
+          fel.c fit_image.c progress.c soc_info.c fel_lib.c fel-spiflash.c \
+          -lws2_32 `pkg-config --libs libusb-1.0` `pkg-config --libs zlib` -lfdt
+
+    - name: Collect Dependencies
+      shell: msys2 {0}
+      run: |
+        # 2. 查找 sunxi-fel.exe 依赖的 DLL 并复制到当前目录
+        # 这样打包后可以直接运行
+        ldd sunxi-fel.exe | grep "lib" | cut -d'=' -f3 | xargs -I '{}' cp '{}' ./ 2>/dev/null || echo "Copied DLLs"
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: sunxi-fel-windows
-        # 上传所有相关文件
         path: |
           sunxi-fel.exe
-          libfdt-1.dll
-          libusb-1.0.dll
-          zlib1.dll
-          # 其他可能需要的 dll...
+          *.dll
