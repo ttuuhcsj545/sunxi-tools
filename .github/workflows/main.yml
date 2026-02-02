@@ -13,7 +13,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Setup MSYS2
       uses: msys2/setup-msys2@v2
@@ -32,17 +32,15 @@ jobs:
         cd ${{ github.workspace }}
         make
         
-    - name: List built files
+    - name: Verify build
       shell: msys2 {0}
       run: |
         ls -la *.exe
         file sunxi-fel.exe
         
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+    - name: Upload Windows binary
+      uses: actions/upload-artifact@v4
       with:
-        name: sunxi-tools-windows
-        path: |
-          sunxi-fel.exe
-          README.md
+        name: sunxi-fel-windows
+        path: sunxi-fel.exe
         retention-days: 7
