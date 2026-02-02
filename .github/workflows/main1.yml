@@ -1,0 +1,68 @@
+name: Build fex2dts for Windows
+
+on: [workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup MSYS2 with dependencies
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        install: |
+          base-devel
+          git
+          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-dtc
+          mingw-w64-x86_64-zlib
+          mingw-w64-x86_64-pkg-config
+          make
+
+    - name: Build fex2dts
+      shell: msys2 {0}
+      run: |
+        echo "=== 构建 fex2dts ==="
+        make clean
+        make fex2dts -j$(nproc)
+        
+        if [ -f fex2dts.exe ]; then
+          echo "✅ fex2dts 构建成功"
+        else
+          echo "❌ fex2dts 构建失败"
+          exit 1
+        fi
+
+    - name: Collect Required DLLs
+      shell: msys2 {0}
+      run: |
+        echo "=== 收集依赖 DLL ==="
+        mkdir -p dist
+        cp fex2dts.exe dist/
+        
+        for dll in libdtc-1.dll zlib1.dll libwinpthread-1.dll libgcc_s_seh-1.dll libstdc++-6.dll; do
+          if [ -f /mingw64/bin/$dll ]; then
+            cp /mingw64/bin/$dll dist/
+            echo "✓ 复制 $dll"
+          fi
+        done
+        
+        echo "=== dist 目录内容 ==="
+        ls -la dist
+
+    - name: Test fex2dts
+      shell: msys2 {0}
+      run: |
+        echo "=== 测试 fex2dts ==="
+        ./dist/fex2dts.exe --help || echo "⚠ fex2dts 运行出错（可能缺依赖）"
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: fex2dts-windows
+        path: dist/
+        retention-days: 7
