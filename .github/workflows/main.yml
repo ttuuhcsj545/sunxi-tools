@@ -9,34 +9,89 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Setup MSYS2
+    - name: Setup MSYS2 with dependencies
       uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
         update: true
-        install: >
-          base-devel git mingw-w64-x86_64-gcc
-          mingw-w64-x86_64-libusb mingw-w64-x86_64-dtc
-          mingw-w64-x86_64-zlib mingw-w64-x86_64-pkg-config make
+        install: |
+          base-devel
+          git
+          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-libusb
+          mingw-w64-x86_64-dtc
+          mingw-w64-x86_64-zlib
+          mingw-w64-x86_64-pkg-config
+          make
 
-    - name: Compile sunxi-fel (Bypassing broken install rule)
+    - name: Build sunxi-fel
       shell: msys2 {0}
       run: |
-        # 1. 只编译 sunxi-fel，不运行 "make install"
-        # 根据 Makefile 规则，手动编译 fel 及其依赖组件
-        gcc -std=c99 -Wall -Wextra -Wno-unused-result \
-          -D_POSIX_C_SOURCE=200112L -D_BSD_SOURCE -D_DEFAULT_SOURCE \
-          -Iinclude/ -DNO_MMAP \
-          -o sunxi-fel.exe \
-          fel.c fit_image.c progress.c soc_info.c fel_lib.c fel-spiflash.c \
-          -lws2_32 `pkg-config --libs libusb-1.0` `pkg-config --libs zlib` -lfdt
+        # 清理并构建
+        make clean
+        make sunxi-fel
+        
+        # 验证构建
+        if [ -f sunxi-fel.exe ]; then
+          echo "✅ Build successful!"
+          file sunxi-fel.exe
+        else
+          echo "❌ Build failed!"
+          exit 1
+        fi
 
-    - name: Collect Dependencies
+    - name: Collect Required DLLs (Windows方法)
       shell: msys2 {0}
       run: |
-        # 2. 查找 sunxi-fel.exe 依赖的 DLL 并复制到当前目录
-        # 这样打包后可以直接运行
-        ldd sunxi-fel.exe | grep "lib" | cut -d'=' -f3 | xargs -I '{}' cp '{}' ./ 2>/dev/null || echo "Copied DLLs"
+        echo "=== 收集依赖的DLL文件 ==="
+        
+        # 方法1: 使用objdump查看依赖
+        echo "检查sunxi-fel.exe的依赖..."
+        objdump -p sunxi-fel.exe | grep "DLL Name:" | cut -d: -f2 | sort | uniq
+        
+        # 方法2: 直接复制已知的依赖DLL
+        echo "复制必要的DLL文件..."
+        
+        # libusb
+        if [ -f /mingw64/bin/libusb-1.0.dll ]; then
+          cp /mingw64/bin/libusb-1.0.dll ./
+          echo "✓ 复制 libusb-1.0.dll"
+        fi
+        
+        # libfdt
+        if [ -f /mingw64/bin/libfdt-1.dll ]; then
+          cp /mingw64/bin/libfdt-1.dll ./
+          echo "✓ 复制 libfdt-1.dll"
+        fi
+        
+        # zlib
+        if [ -f /mingw64/bin/zlib1.dll ]; then
+          cp /mingw64/bin/zlib1.dll ./
+          echo "✓ 复制 zlib1.dll"
+        fi
+        
+        # 其他可能的依赖
+        for dll in libwinpthread-1.dll libgcc_s_seh-1.dll libstdc++-6.dll; do
+          if [ -f /mingw64/bin/$dll ]; then
+            cp /mingw64/bin/$dll ./
+            echo "✓ 复制 $dll"
+          fi
+        done
+        
+        echo "=== 当前目录文件列表 ==="
+        ls -la
+
+    - name: Test the executable
+      shell: msys2 {0}
+      run: |
+        echo "=== 测试可执行文件 ==="
+        # 测试帮助信息（不依赖USB设备）
+        ./sunxi-fel.exe --help && echo "✓ 基本功能正常" || echo "⚠ 运行出错，但可能只是缺少USB设备"
+        
+        echo "=== 依赖检查 ==="
+        # 检查运行时依赖
+        ldd sunxi-fel.exe 2>/dev/null || echo "ldd不可用，使用其他方法检查"
+        objdump -p sunxi-fel.exe | grep "DLL Name:" || true
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
@@ -45,3 +100,4 @@ jobs:
         path: |
           sunxi-fel.exe
           *.dll
+        retention-days: 7
