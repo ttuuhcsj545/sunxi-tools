@@ -1,46 +1,33 @@
-name: Build sunxi-tools for Windows
+name: Build sunxi-tools
 
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:  # 允许手动触发
+on: [workflow_dispatch]
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
+    - uses: actions/checkout@v4
+    
     - name: Setup MSYS2
       uses: msys2/setup-msys2@v2
       with:
         update: true
-        install: >-
+        install: |
+          base-devel
           git
-          make
-          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-toolchain
           mingw-w64-x86_64-libusb
           pkg-config
-
-    - name: Build sunxi-tools
+    
+    - name: Build
       shell: msys2 {0}
       run: |
-        cd ${{ github.workspace }}
+        # 直接在代码目录构建
         make
         
-    - name: Verify build
-      shell: msys2 {0}
-      run: |
-        ls -la *.exe
-        file sunxi-fel.exe
-        
-    - name: Upload Windows binary
+    - name: Upload binary
       uses: actions/upload-artifact@v4
       with:
-        name: sunxi-fel-windows
+        name: sunxi-fel-exe
         path: sunxi-fel.exe
-        retention-days: 7
