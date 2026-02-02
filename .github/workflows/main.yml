@@ -24,18 +24,30 @@ jobs:
           mingw-w64-x86_64-pkg-config
           make
     
-    - name: Build
+    - name: Build and Collect Dependencies
       shell: msys2 {0}
       run: |
+        # 1. 编译程序
         make
         
-    - name: Test
-      shell: msys2 {0}
-      run: |
-        ./sunxi-fel.exe --help || true
+        # 2. 查找 sunxi-fel.exe 依赖的所有 DLL 文件，并复制到当前目录
+        #    ldd: 列出依赖
+        #    grep: 筛选出包含 "mingw64" 路径的行 (即外部库)
+        #    cut: 提取文件路径
+        #    xargs cp: 复制这些文件到当前目录
+        ldd sunxi-fel.exe | grep "mingw64" | cut -d'=' -f3 | xargs cp -t ./
         
-    - name: Upload
+        # 3. (可选) 查看当前目录文件，确认 DLL 已经被复制过来
+        ls -l
+
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: sunxi-fel-windows
-        path: sunxi-fel.exe
+        # 上传所有相关文件
+        path: |
+          sunxi-fel.exe
+          libfdt-1.dll
+          libusb-1.0.dll
+          zlib1.dll
+          # 其他可能需要的 dll...
